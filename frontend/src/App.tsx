@@ -6,7 +6,9 @@ interface ScrapeResult {
   keyword: string;
   exposed: boolean;
   urls: string[];
+  screenshotUrl?: string;
 }
+
 
 function App() {
   const [inputValue, setInputValue] = useState('');
@@ -119,7 +121,20 @@ function App() {
                 )}
               </span>
             </div>
+
+            {res.screenshotUrl && (
+              <div className="screenshot-container">
+                <img 
+                  src={res.screenshotUrl} 
+                  alt={`${res.keyword} 스크린샷`} 
+                  className="screenshot-img"
+                  onClick={() => window.open(res.screenshotUrl, '_blank')}
+                />
+              </div>
+            )}
+
             {res.urls.length > 0 ? (
+
               <ul className="url-list">
                 {res.urls.map((url, i) => (
                   <li key={i} className="url-item">
