@@ -94,9 +94,16 @@ function App() {
       </div>
 
       <div className="results-section">
+        {isScraping && results.length === 0 && (
+          <div className="empty-state">
+            <Loader2 className="animate-spin" size={40} style={{ marginBottom: 20, color: 'var(--primary-color)' }} />
+            첫 번째 키워드를 분석 중입니다... 잠시만 기다려 주세요.
+          </div>
+        )}
+        
         {results.length === 0 && !isScraping && (
           <div className="empty-state">
-            입력된 키워드가 없습니다. 분석을 시작해 보세요!
+            검색창에 키워드를 입력하고 분석을 시작해 보세요!
           </div>
         )}
         
