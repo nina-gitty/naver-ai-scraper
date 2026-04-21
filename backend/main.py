@@ -52,13 +52,23 @@ class NaverAiUltimate:
                 await page.goto(url, wait_until="networkidle", timeout=60000)
                 await asyncio.sleep(3)
                 
-                # [속성 기반 단순화 판정 v32]
-                # data-block-id 속성에 'ai-briefing'이 포함된 요소가 있으면 진짜 AI 브리핑으로 간주합니다.
+                # [하이퍼-스트릭트 판정 로직 v33]
+                # 1. 속성 체크: data-block-id에 'ai-briefing'이 포함되어야 함
+                # 2. 클래스 체크: 내부에 공식 헤더 컨테이너가 있어야 함
+                # 3. 텍스트 체크: 헤더 내에 실제 "AI 브리핑"이라는 글자가 있어야 함
                 aib_container = await page.query_selector('[data-block-id*="ai-briefing"]')
                 
+                is_actually_exposed = False
                 if aib_container:
+                    header = await aib_container.query_selector(".fds-aib-header-container")
+                    if header:
+                        header_text = await header.inner_text()
+                        if "AI 브리핑" in header_text:
+                            is_actually_exposed = True
+                
+                if is_actually_exposed:
                     is_exposed = True
-                    print(f"  > [Confirmed] AI 브리핑(data-block-id) 감지됨")
+                    print(f"  > [Confirmed] 진짜 AI 브리핑(v33) 노출 확인")
                     
                     # 1. 내용 확장
                     expand_btn = await aib_container.query_selector('button:has-text("더보기"), .fds-aib-expand-button, .more')
