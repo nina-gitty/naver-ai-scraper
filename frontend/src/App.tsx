@@ -1,17 +1,24 @@
-import { useState, useEffect } from 'react';
-import { Search, Download, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { useState } from 'react';
+import { Search, Download, Loader2, CheckCircle2, XCircle, FileText, BadgeCheck } from 'lucide-react';
 import './App.css';
+
+interface SourceData {
+  url: string;
+  location: string;
+}
 
 interface ScrapeResult {
   keyword: string;
   exposed: boolean;
-  urls: string[];
+  sources: SourceData[];
   screenshotUrl?: string;
+  matchedKeywords?: string[];
+  allTargetKeywords?: string[];
 }
-
 
 function App() {
   const [inputValue, setInputValue] = useState('');
+  const [targetValue, setTargetValue] = useState('');
   const [results, setResults] = useState<ScrapeResult[]>([]);
   const [isScraping, setIsScraping] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
@@ -24,40 +31,47 @@ function App() {
     setIsFinished(false);
 
     const keywordsParam = encodeURIComponent(inputValue);
-    const eventSource = new EventSource(`http://localhost:8000/api/scrape/stream?keywords=${keywordsParam}`);
+    const targetsParam = encodeURIComponent(targetValue);
+    
+    // 로컬 안정성을 위해 127.0.0.1 직접 사용
+    const apiUrl = `http://127.0.0.1:8000/api/scrape/stream?keywords=${keywordsParam}&targets=${targetsParam}`;
 
-    eventSource.onmessage = (event) => {
-      const data: ScrapeResult = JSON.parse(event.data);
-      // 데이터가 들어오는 즉시 상태 업데이트 (Flush 효과)
-      setResults((prev) => [...prev, data]);
-    };
+    try {
+      const eventSource = new EventSource(apiUrl);
 
-    eventSource.addEventListener('done', () => {
+      eventSource.onmessage = (event) => {
+        const data: ScrapeResult = JSON.parse(event.data);
+        setResults((prev) => [...prev, data]);
+      };
+
+      eventSource.addEventListener('done', () => {
+        setIsScraping(false);
+        setIsFinished(true);
+        eventSource.close();
+      });
+
+      eventSource.onerror = (err) => {
+        console.error("SSE Error:", err);
+        setIsScraping(false);
+        eventSource.close();
+      };
+    } catch (e) {
+      console.error("Error creating EventSource:", e);
       setIsScraping(false);
-      setIsFinished(true);
-      eventSource.close();
-    });
-
-    eventSource.onerror = (err) => {
-      console.error('SSE Error:', err);
-      setIsScraping(false);
-      eventSource.close();
-    };
+    }
   };
 
   const downloadCSV = () => {
-    const headers = ['Keyword', 'AI Exposed', 'Source Count', 'URLs'];
+    const headers = ['Keyword', 'AI Exposed', 'Source Count', 'Matched Keywords', 'URLs'];
     const rows = results.map(r => [
       r.keyword,
       r.exposed ? 'O' : 'X',
-      r.urls.length,
-      r.urls.join(' | ')
+      r.sources.length,
+      r.matchedKeywords?.join('|') || '',
+      r.sources.map(s => s.url).join(' | ')
     ]);
 
-    const csvContent = [headers, ...rows]
-      .map(e => e.join(","))
-      .join("\n");
-
+    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
     const blob = new Blob(["\ufeff" + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -72,26 +86,41 @@ function App() {
     <div className="container">
       <header>
         <h1><Search size={40} /> Naver AI Briefing Scraper</h1>
-        <p className="subtitle">네이버 AI 검색 결과와 출처 URL을 실시간으로 수집합니다.</p>
+        <p className="subtitle">네이버 AI 검색 결과와 출처 URL을 실시간으로 수집 및 검증합니다.</p>
       </header>
 
       <div className="input-section">
-        <textarea
-          placeholder="검색할 키워드들을 쉼표(,)로 구분하여 입력하세요... (예: 아이폰 16, 삼성전자 주가)"
-          value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
-          disabled={isScraping}
-        />
+        <div className="field-group">
+          <label className="field-label"><Search size={16} /> 네이버 검색 키워드</label>
+          <textarea
+            placeholder="검색할 키워드들을 쉼표(,)로 구분하여 입력하세요..."
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            disabled={isScraping}
+          />
+        </div>
+
+        <div className="field-group">
+          <label className="field-label"><BadgeCheck size={16} /> 내용 검증 키워드 (Optional)</label>
+          <textarea
+            placeholder="AI 답변 내에서 등장을 확인할 키워드들을 입력하세요..."
+            value={targetValue}
+            onChange={(e) => setTargetValue(e.target.value)}
+            disabled={isScraping}
+            style={{ height: '60px' }}
+          />
+        </div>
+
         <button 
           className="start-btn" 
           onClick={startScraping}
           disabled={isScraping || !inputValue.trim()}
         >
           {isScraping ? (
-            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10' }}>
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
               <Loader2 className="animate-spin" /> 수집 중...
             </span>
-          ) : '분석 시작하기'}
+          ) : '분석 및 검증 시작하기'}
         </button>
       </div>
 
@@ -99,13 +128,7 @@ function App() {
         {isScraping && results.length === 0 && (
           <div className="empty-state">
             <Loader2 className="animate-spin" size={40} style={{ marginBottom: 20, color: 'var(--primary-color)' }} />
-            첫 번째 키워드를 분석 중입니다... 잠시만 기다려 주세요.
-          </div>
-        )}
-        
-        {results.length === 0 && !isScraping && (
-          <div className="empty-state">
-            검색창에 키워드를 입력하고 분석을 시작해 보세요!
+            키워드를 분석 중입니다... 잠시만 기다려 주세요.
           </div>
         )}
         
@@ -133,12 +156,28 @@ function App() {
               </div>
             )}
 
-            {res.urls.length > 0 ? (
+            {res.allTargetKeywords && res.allTargetKeywords.length > 0 && (
+              <div className="validation-section">
+                <div className="validation-title"><FileText size={14} /> 내용 검증 결과</div>
+                {res.allTargetKeywords.map((tk, i) => {
+                  const isMatched = res.matchedKeywords?.includes(tk);
+                  return (
+                    <span key={i} className={`match-badge ${isMatched ? 'found' : 'missing'}`}>
+                      {isMatched ? '✓' : '✗'} {tk}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
 
+            {res.sources.length > 0 ? (
               <ul className="url-list">
-                {res.urls.map((url, i) => (
+                {res.sources.map((src, i) => (
                   <li key={i} className="url-item">
-                    <a href={url} target="_blank" rel="noopener noreferrer">{url}</a>
+                    <a href={src.url} target="_blank" rel="noopener noreferrer" className="url-link">
+                      {src.url}
+                    </a>
+                    <span className="location-tag">{src.location}</span>
                   </li>
                 ))}
               </ul>
