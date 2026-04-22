@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Search, Download, Loader2, CheckCircle2, XCircle, FileText, BadgeCheck, Square } from 'lucide-react';
 import './App.css';
 
@@ -16,6 +16,8 @@ interface ScrapeResult {
   allTargetKeywords?: string[];
   currentIndex?: number;
   totalCount?: number;
+  dailyCount?: number;
+  dailyLimit?: number;
 }
 
 function App() {
@@ -26,14 +28,15 @@ function App() {
   const [isFinished, setIsFinished] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [eta, setEta] = useState<string | null>(null);
+  const [quota, setQuota] = useState<{count: number, limit: number}>({count: 0, limit: 200});
 
   // 실시간 키워드 개수 및 예상 소요 시간 계산
   const currentKeywordCount = inputValue.split(',').map(k => k.trim()).filter(k => k).length;
   
   const getInitialEta = (count: number) => {
     if (count === 0) return null;
-    const batchSize = 5; // 백엔드 MAX_CONCURRENT_TASKS (수정됨)
-    const secPerBatch = 18; // 대기 시간 증가 반영 (5s+5s+3s + 알파)
+    const batchSize = 5; 
+    const secPerBatch = 18; 
     const totalSeconds = Math.ceil(count / batchSize) * secPerBatch;
     const mins = Math.floor(totalSeconds / 60);
     const secs = totalSeconds % 60;
@@ -45,6 +48,15 @@ function App() {
   // SSE 연결 및 시간 측정을 위한 ref
   const eventSourceRef = useRef<EventSource | null>(null);
   const startTimeRef = useRef<number | null>(null);
+
+  // 초기 쿼터 정보 가져오기
+  useEffect(() => {
+    const host = window.location.hostname;
+    fetch(`http://${host}:8000/api/quota`)
+      .then(res => res.json())
+      .then(data => setQuota({count: data.count, limit: data.limit}))
+      .catch(err => console.error("Quota fetch error:", err));
+  }, []);
 
   const startScraping = () => {
     if (!inputValue.trim()) return;
@@ -71,6 +83,10 @@ function App() {
         const data: ScrapeResult = JSON.parse(event.data);
         setResults((prev) => [...prev, data]);
         
+        if (data.dailyCount !== undefined) {
+          setQuota({ count: data.dailyCount, limit: data.dailyLimit || 200 });
+        }
+
         if (data.currentIndex && data.totalCount && startTimeRef.current) {
           setProgress({ current: data.currentIndex, total: data.totalCount });
           
@@ -153,11 +169,49 @@ function App() {
     document.body.removeChild(link);
   };
 
+  const quotaPercentage = (quota.count / quota.limit) * 100;
+  const quotaStatus = quotaPercentage < 50 ? 'safe' : quotaPercentage < 80 ? 'warning' : 'danger';
+  const statusColors = { safe: '#28a745', warning: '#fd7e14', danger: '#dc3545' };
+
   return (
     <div className="container">
       <header>
         <h1><Search size={40} /> Naver AI Briefing Scraper</h1>
         <p className="subtitle">네이버 AI 검색 결과와 출처 URL을 실시간으로 수집 및 검증합니다.</p>
+        
+        <div className="quota-card" style={{
+          marginTop: '20px',
+          background: 'white',
+          padding: '15px 20px',
+          borderRadius: '12px',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
+          border: `1px solid ${statusColors[quotaStatus]}22`,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#444', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              🛡️ Safe Guard Quota
+            </span>
+            <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: statusColors[quotaStatus] }}>
+              {quota.count} / {quota.limit} (오늘 수집량)
+            </span>
+          </div>
+          <div style={{ width: '100%', height: '8px', background: '#eee', borderRadius: '4px', overflow: 'hidden' }}>
+            <div style={{ 
+              width: `${Math.min(quotaPercentage, 100)}%`, 
+              height: '100%', 
+              background: statusColors[quotaStatus],
+              transition: 'width 0.5s ease'
+            }} />
+          </div>
+          <p style={{ fontSize: '0.75rem', color: '#888', margin: 0 }}>
+            {quotaStatus === 'safe' && "✅ 안정적인 수집 상태입니다."}
+            {quotaStatus === 'warning' && "⚠️ 주의: 수집량이 많습니다. 딜레이를 늘리거나 휴식을 권장합니다."}
+            {quotaStatus === 'danger' && "🚨 위험: 차단 가능성이 높습니다! IP 변경 후 작업을 권장합니다."}
+          </p>
+        </div>
       </header>
 
       <div className="input-section">
@@ -192,7 +246,7 @@ function App() {
           {currentKeywordCount > 0 && (
             <span>
               총 <strong>{currentKeywordCount}개</strong> 감지됨 
-              {!isScraping && ` (예상 소요: 약 ${initialEta})`}
+              {!isScraping && ` (최대 예상: 약 ${initialEta})`}
             </span>
           )}
         </div>
