@@ -26,132 +26,144 @@ SCREENSHOT_DIR = os.path.join(BASE_DIR, "static", "screenshots")
 os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 app.mount("/screenshots", StaticFiles(directory=SCREENSHOT_DIR), name="screenshots")
 
+#병렬처리 
+MAX_CONCURRENT_TASKS =5
+semaphore = asyncio.Semaphore(MAX_CONCURRENT_TASKS)
+
 class NaverAiUltimate:
     def __init__(self):
         self.base_url = "https://search.naver.com/search.naver"
         self.user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
 
-    async def scrape_and_capture(self, keyword, target_keywords, filename):
-        print(f"🚀 [{keyword}] 초정밀 분석 시작...")
-        async with async_playwright() as p:
-            try:
-                browser = await p.chromium.launch(headless=True)
-                context = await browser.new_context(
-                    viewport={'width': 1280, 'height': 2000},
-                    user_agent=self.user_agent
-                )
+    async def scrape_and_capture(self, keyword, target_keywords, filename, browser):
+        async with semaphore:
+            print(f"⚡️ [{keyword}] 분석 시작 (터보 모드)")
+            context = await browser.new_context(
+                viewport={'width': 1280, 'height': 2000},
+                user_agent=self.user_agent
+            )
+            
+            async with context:
                 page = await context.new_page()
                 url = f"{self.base_url}?where=nexearch&query={keyword}"
                 
                 found_data = []
-                seen_urls = set()
+                seen_pairs = set()
                 is_exposed = False
                 matched_targets = []
                 full_text = ""
 
-                await page.goto(url, wait_until="networkidle", timeout=60000)
-                await asyncio.sleep(3)
-                
-                # [하이퍼-스트릭트 판정 로직 v33]
-                # 1. 속성 체크: data-block-id에 'ai-briefing'이 포함되어야 함
-                # 2. 클래스 체크: 내부에 공식 헤더 컨테이너가 있어야 함
-                # 3. 텍스트 체크: 헤더 내에 실제 "AI 브리핑"이라는 글자가 있어야 함
-                aib_container = await page.query_selector('[data-block-id*="ai-briefing"]')
-                
-                is_actually_exposed = False
-                if aib_container:
-                    header = await aib_container.query_selector(".fds-aib-header-container")
-                    if header:
-                        header_text = await header.inner_text()
-                        if "AI 브리핑" in header_text:
-                            is_actually_exposed = True
-                
-                if is_actually_exposed:
-                    is_exposed = True
-                    print(f"  > [Confirmed] 진짜 AI 브리핑(v33) 노출 확인")
+                try:
+                    # [최적화 1] networkidle 대신 domcontentloaded로 빠른 진입
+                    await page.goto(url, wait_until="domcontentloaded", timeout=30000)
                     
-                    # 1. 내용 확장
-                    expand_btn = await aib_container.query_selector('button:has-text("더보기"), .fds-aib-expand-button, .more')
-                    if expand_btn:
-                        await expand_btn.click(force=True)
-                        await asyncio.sleep(5)
-
-                    text_elements = await aib_container.query_selector_all('.fds-markdown-p')
-                    for el in text_elements:
-                        full_text += await el.inner_text()
+                    # AI 브리핑 판정 (빠른 체크)
+                    aib_container = await page.query_selector('[data-block-id*="ai-briefing"]')
+                    if aib_container:
+                        aib_header = await aib_container.query_selector(".fds-aib-header-container")
+                        if aib_header and "AI 브리핑" in (await aib_header.inner_text()):
+                            is_exposed = True
                     
-                    for tk in target_keywords:
-                        if tk and tk.lower() in full_text.lower():
-                            matched_targets.append(tk)
+                    if is_exposed:
+                        # 고정 대기 시간
+                        expand_btn = await aib_container.query_selector('button:has-text("더보기"), .fds-aib-expand-button, .more')
+                        if expand_btn:
+                            await expand_btn.click(force=True)
+                            await asyncio.sleep(5) 
 
-                    source_btn = await aib_container.query_selector('button:has-text("전체보기"), button:has-text("출처")')
-                    if source_btn:
-                        await source_btn.click(force=True)
-                        await asyncio.sleep(3)
+                        # 본문 텍스트 추출
+                        text_elements = await aib_container.query_selector_all('.fds-markdown-p')
+                        for el in text_elements:
+                            full_text += await el.inner_text()
+                        for tk in target_keywords:
+                            if tk and tk.lower() in full_text.lower():
+                                matched_targets.append(tk)
 
-                    # 링크 수집 (상단 캐러셀 + 출처 패널)
-                    multimedia_items = await aib_container.query_selector_all('.fds-multimedia-item a')
-                    for link in multimedia_items:
-                        href = await link.get_attribute("href")
-                        if href and href.startswith("http"):
-                            u_clean = href.split('?')[0].split('#')[0]
-                            if u_clean not in seen_urls:
-                                seen_urls.add(u_clean)
-                                found_data.append({"url": u_clean, "location": "상단 캐러셀"})
+                        # 출처 패널 클릭 후 대기 시간
+                        source_btn = await aib_container.query_selector('button:has-text("전체보기"), button:has-text("출처")')
+                        if source_btn:
+                            await source_btn.click(force=True)
+                            await asyncio.sleep(3) 
 
-                    source_panel = await page.query_selector('.fds-aib-multi-source-scroll-area')
-                    if source_panel:
-                        panel_links = await source_panel.query_selector_all('a')
-                        for link in panel_links:
+                        # 링크 수집
+                        # (1) 상단 캐러셀
+                        multimedia_items = await aib_container.query_selector_all('.fds-multimedia-item a')
+                        for link in multimedia_items:
                             href = await link.get_attribute("href")
                             if href and href.startswith("http"):
                                 u_clean = href.split('?')[0].split('#')[0]
-                                if u_clean not in seen_urls:
-                                    seen_urls.add(u_clean)
-                                    found_data.append({"url": u_clean, "location": "출처 패널"})
-                else:
-                    print(f"  > [{keyword}] 광고 블록 또는 미노출 (판정 제외 완료)")
-                
-                save_path = os.path.join(SCREENSHOT_DIR, filename)
-                await page.screenshot(path=save_path)
-                await browser.close()
-                return is_exposed, found_data, filename, matched_targets
-            except Exception as e:
-                print(f"  ❌ 오류 발생: {e}")
-                return False, [], None, []
+                                pair = (u_clean, "상단 캐러셀")
+                                if pair not in seen_pairs:
+                                    seen_pairs.add(pair)
+                                    found_data.append({"url": u_clean, "location": "상단 캐러셀"})
+
+                        # (2) 출처 패널
+                        source_panel = await page.query_selector('.fds-aib-multi-source-scroll-area')
+                        if source_panel:
+                            panel_links = await source_panel.query_selector_all('a')
+                            for link in panel_links:
+                                href = await link.get_attribute("href")
+                                if href and href.startswith("http"):
+                                    u_clean = href.split('?')[0].split('#')[0]
+                                    pair = (u_clean, "출처 패널")
+                                    if pair not in seen_pairs:
+                                        seen_pairs.add(pair)
+                                        found_data.append({"url": u_clean, "location": "출처 패널"})
+                    
+                    # 스크린샷 캡처
+                    save_path = os.path.join(SCREENSHOT_DIR, filename)
+                    await page.screenshot(path=save_path)
+                    print(f"✅ [{keyword}] 분석 완료")
+                    return is_exposed, found_data, filename, matched_targets
+                except Exception as e:
+                    print(f"  ❌ [{keyword}] 오류: {e}")
+                    return False, [], None, []
 
 @app.get("/")
 async def root():
-    return {"status": "ok", "message": "v31 Attribute-based Strict Version is running"}
+    return {"status": "ok", "message": "Naver AI Briefing Scraper v2.0 (Turbo Parallel) is running"}
 
 @app.get("/api/scrape/stream")
 async def stream_scrape(request: Request, keywords: str, targets: str = ""):
     host = request.url.hostname
     port = request.url.port or 8000
     base_url = f"http://{host}:{port}"
+    
     scraper = NaverAiUltimate()
     keyword_list = [k.strip() for k in keywords.split(",") if k.strip()]
     target_list = [t.strip() for t in targets.split(",") if t.strip()]
-    
+    total_count = len(keyword_list)
+
     async def event_generator():
-        for idx, kw in enumerate(keyword_list):
-            if await request.is_disconnected(): break
-            img_filename = f"final_{int(time.time())}_{idx}.png"
-            exposed, source_data, filename, matched = await scraper.scrape_and_capture(kw, target_list, img_filename)
-            img_url = f"{base_url}/screenshots/{filename}" if filename else None
-            result = {
-                "keyword": kw,
-                "exposed": exposed,
-                "sources": source_data,
-                "screenshotUrl": img_url,
-                "matchedKeywords": matched,
-                "allTargetKeywords": target_list,
-                "currentIndex": idx + 1,
-                "totalCount": len(keyword_list)
-            }
-            yield {"event": "message", "data": json.dumps(result)}
-            await asyncio.sleep(1)
-        yield {"event": "done", "data": "finished"}
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            
+            async def task_wrapper(kw, idx):
+                img_filename = f"final_{int(time.time())}_{idx}.png"
+                res = await scraper.scrape_and_capture(kw, target_list, img_filename, browser)
+                return (kw, res)
+
+            tasks = [task_wrapper(kw, i) for i, kw in enumerate(keyword_list)]
+            completed = 0
+            for coro in asyncio.as_completed(tasks):
+                if await request.is_disconnected(): break
+                kw, (exposed, source_data, filename, matched) = await coro
+                completed += 1
+                img_url = f"{base_url}/screenshots/{filename}" if filename else None
+                result = {
+                    "keyword": kw,
+                    "exposed": exposed,
+                    "sources": source_data,
+                    "screenshotUrl": img_url,
+                    "matchedKeywords": matched,
+                    "allTargetKeywords": target_list,
+                    "currentIndex": completed,
+                    "totalCount": total_count
+                }
+                yield {"event": "message", "data": json.dumps(result)}
+            await browser.close()
+            yield {"event": "done", "data": "finished"}
+
     return EventSourceResponse(event_generator())
 
 if __name__ == "__main__":

@@ -6,6 +6,6 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    host: '127.0.0.1' // 외부 노출 없이 로컬 IPv4로 고정
+    host: true // 로컬 네트워크의 모든 기기에서 접속 허용
   }
 })

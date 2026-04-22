@@ -14,6 +14,8 @@ interface ScrapeResult {
   screenshotUrl?: string;
   matchedKeywords?: string[];
   allTargetKeywords?: string[];
+  currentIndex?: number;
+  totalCount?: number;
 }
 
 function App() {
@@ -22,19 +24,24 @@ function App() {
   const [results, setResults] = useState<ScrapeResult[]>([]);
   const [isScraping, setIsScraping] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
 
   const startScraping = () => {
     if (!inputValue.trim()) return;
 
+    const keywordList = inputValue.split(',').map(k => k.trim()).filter(k => k);
     setResults([]);
     setIsScraping(true);
     setIsFinished(false);
+    // 시작 즉시 진행률 초기화 (0/N)
+    setProgress({ current: 0, total: keywordList.length });
 
     const keywordsParam = encodeURIComponent(inputValue);
     const targetsParam = encodeURIComponent(targetValue);
     
-    // 로컬 안정성을 위해 127.0.0.1 직접 사용
-    const apiUrl = `http://127.0.0.1:8000/api/scrape/stream?keywords=${keywordsParam}&targets=${targetsParam}`;
+    // 현재 브라우저 주소창의 호스트(localhost, IP, 또는 도메인)를 자동으로 감지합니다.
+    const currentHost = window.location.hostname;
+    const apiUrl = `http://${currentHost}:8000/api/scrape/stream?keywords=${keywordsParam}&targets=${targetsParam}`;
 
     try {
       const eventSource = new EventSource(apiUrl);
@@ -42,6 +49,9 @@ function App() {
       eventSource.onmessage = (event) => {
         const data: ScrapeResult = JSON.parse(event.data);
         setResults((prev) => [...prev, data]);
+        if (data.currentIndex && data.totalCount) {
+          setProgress({ current: data.currentIndex, total: data.totalCount });
+        }
       };
 
       eventSource.addEventListener('done', () => {
@@ -125,10 +135,18 @@ function App() {
       </div>
 
       <div className="results-section">
-        {isScraping && results.length === 0 && (
-          <div className="empty-state">
-            <Loader2 className="animate-spin" size={40} style={{ marginBottom: 20, color: 'var(--primary-color)' }} />
-            키워드를 분석 중입니다... 잠시만 기다려 주세요.
+        {isScraping && progress.total > 0 && (
+          <div className="progress-container">
+            <div className="progress-header">
+              <span className="loading-text">네이버 AI 데이터 분석 중</span>
+              <span>{progress.current} / {progress.total} 완료</span>
+            </div>
+            <div className="progress-bar-bg">
+              <div 
+                className="progress-bar-fill" 
+                style={{ width: `${(progress.current / progress.total) * 100}%` }}
+              ></div>
+            </div>
           </div>
         )}
         
