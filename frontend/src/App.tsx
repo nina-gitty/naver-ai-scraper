@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Search, Download, Loader2, CheckCircle2, XCircle, FileText, BadgeCheck } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { Search, Download, Loader2, CheckCircle2, XCircle, FileText, BadgeCheck, Square } from 'lucide-react';
 import './App.css';
 
 interface SourceData {
@@ -25,45 +25,85 @@ function App() {
   const [isScraping, setIsScraping] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [eta, setEta] = useState<string | null>(null);
+
+  // 실시간 키워드 개수 및 예상 소요 시간 계산
+  const currentKeywordCount = inputValue.split(',').map(k => k.trim()).filter(k => k).length;
+  
+  const getInitialEta = (count: number) => {
+    if (count === 0) return null;
+    const batchSize = 5; // 백엔드 MAX_CONCURRENT_TASKS (수정됨)
+    const secPerBatch = 18; // 대기 시간 증가 반영 (5s+5s+3s + 알파)
+    const totalSeconds = Math.ceil(count / batchSize) * secPerBatch;
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins > 0 ? `${mins}분 ` : ''}${secs}초`;
+  };
+
+  const initialEta = getInitialEta(currentKeywordCount);
+  
+  // SSE 연결 및 시간 측정을 위한 ref
+  const eventSourceRef = useRef<EventSource | null>(null);
+  const startTimeRef = useRef<number | null>(null);
 
   const startScraping = () => {
     if (!inputValue.trim()) return;
 
-    const keywordList = inputValue.split(',').map(k => k.trim()).filter(k => k);
+    const keywords = inputValue.split(',').map(k => k.trim()).filter(k => k);
     setResults([]);
     setIsScraping(true);
     setIsFinished(false);
-    // 시작 즉시 진행률 초기화 (0/N)
-    setProgress({ current: 0, total: keywordList.length });
+    setProgress({ current: 0, total: keywords.length });
+    setEta(null);
+    startTimeRef.current = Date.now();
 
     const keywordsParam = encodeURIComponent(inputValue);
     const targetsParam = encodeURIComponent(targetValue);
     
-    // 현재 브라우저 주소창의 호스트(localhost, IP, 또는 도메인)를 자동으로 감지합니다.
-    const currentHost = window.location.hostname;
-    const apiUrl = `http://${currentHost}:8000/api/scrape/stream?keywords=${keywordsParam}&targets=${targetsParam}`;
+    const host = window.location.hostname;
+    const apiUrl = `http://${host}:8000/api/scrape/stream?keywords=${keywordsParam}&targets=${targetsParam}`;
 
     try {
       const eventSource = new EventSource(apiUrl);
+      eventSourceRef.current = eventSource;
 
       eventSource.onmessage = (event) => {
         const data: ScrapeResult = JSON.parse(event.data);
         setResults((prev) => [...prev, data]);
-        if (data.currentIndex && data.totalCount) {
+        
+        if (data.currentIndex && data.totalCount && startTimeRef.current) {
           setProgress({ current: data.currentIndex, total: data.totalCount });
+          
+          // ETA 계산
+          const elapsed = (Date.now() - startTimeRef.current) / 1000;
+          const completed = data.currentIndex;
+          const total = data.totalCount;
+          
+          if (completed > 0) {
+            const timePerItem = elapsed / completed;
+            const remaining = total - completed;
+            const remainingSeconds = Math.round(timePerItem * remaining);
+            
+            if (remainingSeconds > 0) {
+              const minutes = Math.floor(remainingSeconds / 60);
+              const seconds = remainingSeconds % 60;
+              setEta(`${minutes > 0 ? `${minutes}분 ` : ''}${seconds}초 남음`);
+            } else {
+              setEta('완료 중...');
+            }
+          }
         }
       };
 
       eventSource.addEventListener('done', () => {
-        setIsScraping(false);
+        cleanup();
         setIsFinished(true);
-        eventSource.close();
+        setEta(null);
       });
 
       eventSource.onerror = (err) => {
         console.error("SSE Error:", err);
-        setIsScraping(false);
-        eventSource.close();
+        cleanup();
       };
     } catch (e) {
       console.error("Error creating EventSource:", e);
@@ -71,15 +111,36 @@ function App() {
     }
   };
 
+  const stopScraping = () => {
+    console.log("⏹ 수집 중단 요청");
+    cleanup();
+  };
+
+  const cleanup = () => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+    setIsScraping(false);
+  };
+
   const downloadCSV = () => {
-    const headers = ['Keyword', 'AI Exposed', 'Source Count', 'Matched Keywords', 'URLs'];
-    const rows = results.map(r => [
-      r.keyword,
-      r.exposed ? 'O' : 'X',
-      r.sources.length,
-      r.matchedKeywords?.join('|') || '',
-      r.sources.map(s => s.url).join(' | ')
-    ]);
+    const headers = ['Keyword', 'AI Exposed', 'Matched Keywords', 'Carousel Count', 'Carousel URLs', 'Panel Count', 'Panel URLs'];
+    
+    const rows = results.map(r => {
+      const carouselSources = r.sources.filter(s => s.location === '상단 캐러셀').map(s => s.url);
+      const panelSources = r.sources.filter(s => s.location === '출처 패널').map(s => s.url);
+      
+      return [
+        r.keyword,
+        r.exposed ? 'O' : 'X',
+        r.matchedKeywords?.join('|') || '',
+        carouselSources.length,
+        carouselSources.join(' | '),
+        panelSources.length,
+        panelSources.join(' | ')
+      ];
+    });
 
     const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
     const blob = new Blob(["\ufeff" + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -121,17 +182,57 @@ function App() {
           />
         </div>
 
-        <button 
-          className="start-btn" 
-          onClick={startScraping}
-          disabled={isScraping || !inputValue.trim()}
-        >
-          {isScraping ? (
-            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-              <Loader2 className="animate-spin" /> 수집 중...
+        <div className="keyword-counter" style={{ 
+          fontSize: '0.85rem', 
+          color: '#666', 
+          textAlign: 'right', 
+          marginBottom: '-10px',
+          fontWeight: '500'
+        }}>
+          {currentKeywordCount > 0 && (
+            <span>
+              총 <strong>{currentKeywordCount}개</strong> 감지됨 
+              {!isScraping && ` (예상 소요: 약 ${initialEta})`}
             </span>
-          ) : '분석 및 검증 시작하기'}
-        </button>
+          )}
+        </div>
+
+        <div className="button-group" style={{ display: 'flex', gap: '10px' }}>
+          <button 
+            className="start-btn" 
+            onClick={startScraping}
+            disabled={isScraping || !inputValue.trim()}
+            style={{ flex: isScraping ? 3 : 1 }}
+          >
+            {isScraping ? (
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                <Loader2 className="animate-spin" /> 분석 중...
+              </span>
+            ) : `분석 및 검증 시작하기 (${currentKeywordCount}개)`}
+          </button>
+          
+          {isScraping && (
+            <button 
+              className="stop-btn" 
+              onClick={stopScraping}
+              style={{ 
+                flex: 1, 
+                backgroundColor: '#dc3545', 
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '12px',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px'
+              }}
+            >
+              <Square size={16} fill="white" /> 중단
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="results-section">
@@ -139,7 +240,12 @@ function App() {
           <div className="progress-container">
             <div className="progress-header">
               <span className="loading-text">네이버 AI 데이터 분석 중</span>
-              <span>{progress.current} / {progress.total} 완료</span>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '0.85rem', color: '#666', marginBottom: '4px' }}>
+                  {eta && <span>⏳ 최대 예상: {eta}</span>}
+                </div>
+                <span>{progress.current} / {progress.total} 완료</span>
+              </div>
             </div>
             <div className="progress-bar-bg">
               <div 
@@ -206,7 +312,7 @@ function App() {
         ))}
       </div>
 
-      {isFinished && (
+      {(isFinished || results.length > 0) && (
         <div className="export-section">
           <button className="export-btn" onClick={downloadCSV}>
             <Download size={18} style={{ marginRight: 8 }} /> CSV로 저장하기
