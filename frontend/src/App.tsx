@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Search, Download, Loader2, CheckCircle2, XCircle, FileText, BadgeCheck, Square } from 'lucide-react';
+import { Search, Download, Loader2, CheckCircle2, XCircle, FileText, BadgeCheck, Square, ShieldCheck } from 'lucide-react';
 import './App.css';
 
 interface SourceData {
@@ -171,54 +171,43 @@ function App() {
 
   const quotaPercentage = (quota.count / quota.limit) * 100;
   const quotaStatus = quotaPercentage < 50 ? 'safe' : quotaPercentage < 80 ? 'warning' : 'danger';
-  const statusColors = { safe: '#28a745', warning: '#fd7e14', danger: '#dc3545' };
+  const statusColors = { safe: '#10b981', warning: '#f59e0b', danger: '#ef4444' };
 
   return (
     <div className="container">
       <header>
-        <h1><Search size={40} /> Naver AI Briefing Scraper</h1>
-        <p className="subtitle">네이버 AI 검색 결과와 출처 URL을 실시간으로 수집 및 검증합니다.</p>
+        <h1><Search size={32} className="icon-main" /> AI Briefing Insights</h1>
+        <p className="subtitle">네이버 AI 검색 노출 현황을 실시간으로 모니터링합니다.</p>
         
-        <div className="quota-card" style={{
-          marginTop: '20px',
-          background: 'white',
-          padding: '15px 20px',
-          borderRadius: '12px',
-          boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
-          border: `1px solid ${statusColors[quotaStatus]}22`,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '8px'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.9rem', fontWeight: 'bold', color: '#444', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              🛡️ Safe Guard Quota
+        <div className="quota-card">
+          <div className="quota-header">
+            <span className="quota-title">
+              <ShieldCheck size={18} /> Quota
             </span>
-            <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: statusColors[quotaStatus] }}>
-              {quota.count} / {quota.limit} (오늘 수집량)
+            <span className="quota-values" style={{ color: statusColors[quotaStatus] }}>
+              {quota.count} / {quota.limit} <span className="quota-label">(오늘 수집량)</span>
             </span>
           </div>
-          <div style={{ width: '100%', height: '8px', background: '#eee', borderRadius: '4px', overflow: 'hidden' }}>
-            <div style={{ 
+          <div className="progress-bar-bg">
+            <div className="progress-bar-fill" style={{ 
               width: `${Math.min(quotaPercentage, 100)}%`, 
-              height: '100%', 
-              background: statusColors[quotaStatus],
-              transition: 'width 0.5s ease'
+              backgroundColor: statusColors[quotaStatus],
+              transition: 'all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)'
             }} />
           </div>
-          <p style={{ fontSize: '0.75rem', color: '#888', margin: 0 }}>
-            {quotaStatus === 'safe' && "✅ 안정적인 수집 상태입니다."}
-            {quotaStatus === 'warning' && "⚠️ 주의: 수집량이 많습니다. 딜레이를 늘리거나 휴식을 권장합니다."}
-            {quotaStatus === 'danger' && "🚨 위험: 차단 가능성이 높습니다! IP 변경 후 작업을 권장합니다."}
+          <p className="quota-hint">
+            {quotaStatus === 'safe' && "✅ 시스템이 안정적으로 작동 중입니다."}
+            {quotaStatus === 'warning' && "⚠️ 수집량이 많습니다. 잠시 휴식을 권장합니다."}
+            {quotaStatus === 'danger' && "🚨 차단 위험! IP를 변경하거나 수집을 중단하세요."}
           </p>
         </div>
       </header>
 
       <div className="input-section">
         <div className="field-group">
-          <label className="field-label"><Search size={16} /> 네이버 검색 키워드</label>
+          <label className="field-label"><Search size={14} /> 네이버 검색 키워드</label>
           <textarea
-            placeholder="검색할 키워드들을 쉼표(,)로 구분하여 입력하세요..."
+            placeholder="키워드들을 쉼표(,)로 구분하여 입력하세요..."
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             disabled={isScraping}
@@ -226,9 +215,9 @@ function App() {
         </div>
 
         <div className="field-group">
-          <label className="field-label"><BadgeCheck size={16} /> 내용 검증 키워드 (Optional)</label>
+          <label className="field-label"><BadgeCheck size={14} /> 내용 검증 키워드 (선택)</label>
           <textarea
-            placeholder="AI 답변 내에서 등장을 확인할 키워드들을 입력하세요..."
+            placeholder="AI 답변 내 포함 여부를 확인할 키워드를 입력하세요..."
             value={targetValue}
             onChange={(e) => setTargetValue(e.target.value)}
             disabled={isScraping}
@@ -236,54 +225,34 @@ function App() {
           />
         </div>
 
-        <div className="keyword-counter" style={{ 
-          fontSize: '0.85rem', 
-          color: '#666', 
-          textAlign: 'right', 
-          marginBottom: '-10px',
-          fontWeight: '500'
-        }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           {currentKeywordCount > 0 && (
-            <span>
-              총 <strong>{currentKeywordCount}개</strong> 감지됨 
+            <div className="keyword-counter">
+              <strong>{currentKeywordCount}개</strong> 감지됨 
               {!isScraping && ` (최대 예상: 약 ${initialEta})`}
-            </span>
+            </div>
           )}
         </div>
 
-        <div className="button-group" style={{ display: 'flex', gap: '10px' }}>
+        <div className="button-group">
           <button 
             className="start-btn" 
             onClick={startScraping}
             disabled={isScraping || !inputValue.trim()}
-            style={{ flex: isScraping ? 3 : 1 }}
+            style={{ width: '100%' }}
           >
             {isScraping ? (
-              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-                <Loader2 className="animate-spin" /> 분석 중...
-              </span>
-            ) : `분석 및 검증 시작하기 (${currentKeywordCount}개)`}
+              <>
+                <Loader2 className="animate-spin" size={20} /> 분석 진행 중
+              </>
+            ) : (
+              <>분석 및 검증 시작하기</>
+            )}
           </button>
           
           {isScraping && (
-            <button 
-              className="stop-btn" 
-              onClick={stopScraping}
-              style={{ 
-                flex: 1, 
-                backgroundColor: '#dc3545', 
-                color: 'white', 
-                border: 'none', 
-                borderRadius: '12px',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px'
-              }}
-            >
-              <Square size={16} fill="white" /> 중단
+            <button className="stop-btn" onClick={stopScraping} style={{ width: '100%', marginTop: '12px' }}>
+              <Square size={16} fill="currentColor" /> 수집 중단하기
             </button>
           )}
         </div>
@@ -292,13 +261,11 @@ function App() {
       <div className="results-section">
         {isScraping && progress.total > 0 && (
           <div className="progress-container">
-            <div className="progress-header">
-              <span className="loading-text">네이버 AI 데이터 분석 중</span>
+            <div className="progress-header" style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span className="loading-text">실시간 데이터 분석 중</span>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: '0.85rem', color: '#666', marginBottom: '4px' }}>
-                  {eta && <span>⏳ 최대 예상: {eta}</span>}
-                </div>
-                <span>{progress.current} / {progress.total} 완료</span>
+                {eta && <div className="eta-text">⏳ 남은 시간: {eta}</div>}
+                <div className="count-text">{progress.current} / {progress.total} 완료</div>
               </div>
             </div>
             <div className="progress-bar-bg">
@@ -315,11 +282,8 @@ function App() {
             <div className="card-header">
               <span className="keyword-badge">{res.keyword}</span>
               <span className={`status-badge ${res.exposed ? 'success' : 'error'}`}>
-                {res.exposed ? (
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><CheckCircle2 size={16} /> AI 노출됨</span>
-                ) : (
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><XCircle size={16} /> AI 미노출</span>
-                )}
+                {res.exposed ? <CheckCircle2 size={14} /> : <XCircle size={14} />}
+                {res.exposed ? 'AI 노출됨' : 'AI 미노출'}
               </span>
             </div>
 
@@ -327,7 +291,7 @@ function App() {
               <div className="screenshot-container">
                 <img 
                   src={res.screenshotUrl} 
-                  alt={`${res.keyword} 스크린샷`} 
+                  alt={res.keyword} 
                   className="screenshot-img"
                   onClick={() => window.open(res.screenshotUrl, '_blank')}
                 />
@@ -337,30 +301,32 @@ function App() {
             {res.allTargetKeywords && res.allTargetKeywords.length > 0 && (
               <div className="validation-section">
                 <div className="validation-title"><FileText size={14} /> 내용 검증 결과</div>
-                {res.allTargetKeywords.map((tk, i) => {
-                  const isMatched = res.matchedKeywords?.includes(tk);
-                  return (
-                    <span key={i} className={`match-badge ${isMatched ? 'found' : 'missing'}`}>
-                      {isMatched ? '✓' : '✗'} {tk}
-                    </span>
-                  );
-                })}
+                <div className="badges-wrapper">
+                  {res.allTargetKeywords.map((tk, i) => {
+                    const isMatched = res.matchedKeywords?.includes(tk);
+                    return (
+                      <span key={i} className={`match-badge ${isMatched ? 'found' : 'missing'}`}>
+                        {isMatched ? '✓' : '✗'} {tk}
+                      </span>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
             {res.sources.length > 0 ? (
-              <ul className="url-list">
+              <div className="url-list">
                 {res.sources.map((src, i) => (
-                  <li key={i} className="url-item">
+                  <div key={i} className="url-item">
                     <a href={src.url} target="_blank" rel="noopener noreferrer" className="url-link">
                       {src.url}
                     </a>
                     <span className="location-tag">{src.location}</span>
-                  </li>
+                  </div>
                 ))}
-              </ul>
+              </div>
             ) : (
-              <p style={{ color: '#999', fontSize: '0.9rem' }}>수집된 출처 URL이 없습니다.</p>
+              <p className="no-data">수집된 출처 URL이 없습니다.</p>
             )}
           </div>
         ))}
@@ -369,7 +335,7 @@ function App() {
       {(isFinished || results.length > 0) && (
         <div className="export-section">
           <button className="export-btn" onClick={downloadCSV}>
-            <Download size={18} style={{ marginRight: 8 }} /> CSV로 저장하기
+            <Download size={18} /> CSV 데이터 내보내기
           </button>
         </div>
       )}

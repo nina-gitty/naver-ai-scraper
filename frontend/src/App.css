@@ -42,12 +42,51 @@ header h1 {
   margin-bottom: 10px;
 }
 
-
 .subtitle {
   color: #666;
   font-size: 1.1rem;
 }
 
+/* Quota Card */
+.quota-card {
+  margin-top: 20px;
+  background: white;
+  padding: 15px 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.quota-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.quota-title {
+  font-size: 0.9rem;
+  font-weight: bold;
+  color: #444;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.quota-values {
+  font-size: 0.85rem;
+  font-weight: bold;
+}
+
+.quota-hint {
+  font-size: 0.75rem;
+  color: #888;
+  margin: 0;
+}
+
+/* Input Section */
 .input-section {
   background: var(--card-bg);
   padding: 30px;
@@ -76,7 +115,6 @@ header h1 {
 
 textarea {
   width: 100%;
-  height: 80px;
   padding: 15px;
   border: 2px solid var(--border-color);
   border-radius: 12px;
@@ -90,8 +128,15 @@ textarea:focus {
   border-color: var(--primary-color);
 }
 
-button.start-btn {
-  width: 100%;
+.keyword-counter {
+  font-size: 0.85rem;
+  color: #666;
+  text-align: right;
+  font-weight: 500;
+}
+
+/* Buttons */
+.start-btn {
   padding: 15px;
   background-color: var(--primary-color);
   color: white;
@@ -103,17 +148,30 @@ button.start-btn {
   transition: transform 0.1s, opacity 0.3s;
 }
 
-button.start-btn:hover {
+.start-btn:hover { opacity: 0.9; }
+.start-btn:active { transform: scale(0.98); }
+.start-btn:disabled { background-color: #ccc; cursor: not-allowed; }
+
+.stop-btn {
+  background-color: var(--error);
+  color: white;
+  border: none;
+  padding: 15px; /* 시작 버튼과 동일한 크기 */
+  border-radius: 12px;
+  font-size: 1.1rem;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 10px;
+  transition: opacity 0.3s;
+}
+
+.stop-btn:hover {
   opacity: 0.9;
-}
-
-button.start-btn:active {
-  transform: scale(0.98);
-}
-
-button.start-btn:disabled {
-  background-color: #ccc;
-  cursor: not-allowed;
 }
 
 /* Progress UI */
@@ -132,8 +190,9 @@ button.start-btn:disabled {
   align-items: center;
   margin-bottom: 12px;
   font-weight: 700;
-  color: var(--primary-color);
 }
+
+.loading-text { color: var(--primary-color); }
 
 .progress-bar-bg {
   width: 100%;
@@ -149,50 +208,64 @@ button.start-btn:disabled {
   transition: width 0.4s ease-out;
 }
 
-/* Results UI */
-.results-section {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
+/* Results */
 .result-card {
   background: var(--card-bg);
   padding: 25px;
   border-radius: 20px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
   border: 1px solid var(--border-color);
-  animation: slideIn 0.4s ease-out forwards;
+  margin-bottom: 20px;
   display: flex;
   flex-direction: column;
   gap: 20px;
 }
 
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.keyword-badge {
+  background: #e9ecef;
+  padding: 5px 15px;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 1.1rem;
+}
+
+.status-badge {
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.status-badge.success { background: #e6f4ea; color: var(--success); }
+.status-badge.error { background: #fce8e6; color: var(--error); }
+
 .screenshot-container {
   width: 100%;
+  max-height: 400px; /* 너무 길어지지 않게 제한 */
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid var(--border-color);
-  background: #eee;
-  aspect-ratio: 16 / 10;
-  cursor: pointer;
+  cursor: zoom-in;
 }
 
-.screenshot-img {
-  width: 100%;
+.screenshot-img { 
+  width: 100%; 
   height: 100%;
   object-fit: cover;
-  display: block;
-  transition: transform 0.3s;
+  object-position: top; /* 이미지의 상단(AI브리핑 영역) 위주로 노출 */
+  display: block; 
 }
 
-.screenshot-img:hover {
-  transform: scale(1.02);
-}
-
-/* Validation Badge UI */
 .validation-section {
-  margin: 15px 0;
   padding: 15px;
   background: #f8f9fa;
   border-radius: 12px;
@@ -202,7 +275,6 @@ button.start-btn:disabled {
 .validation-title {
   font-size: 0.85rem;
   font-weight: 700;
-  color: #495057;
   margin-bottom: 10px;
   display: flex;
   align-items: center;
@@ -210,30 +282,19 @@ button.start-btn:disabled {
 }
 
 .match-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
   padding: 4px 10px;
   border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
   margin-right: 6px;
   margin-bottom: 6px;
+  display: inline-block;
+  border: 1px solid #eee;
 }
 
-.match-badge.found {
-  background: #e6f9ef;
-  color: #18794e;
-  border: 1px solid #b2eccf;
-}
+.match-badge.found { background: #e6f9ef; color: #18794e; border-color: #b2eccf; }
+.match-badge.missing { background: #fff1f0; color: #cf222e; border-color: #ffd8d6; }
 
-.match-badge.missing {
-  background: #fff1f0;
-  color: #cf222e;
-  border: 1px solid #ffd8d6;
-}
-
-/* URL List UI */
 .url-item {
   margin-bottom: 10px;
   padding: 12px 16px;
@@ -248,13 +309,12 @@ button.start-btn:disabled {
 }
 
 .url-link {
-  color: #007bff;
+  color: var(--primary-color);
   text-decoration: none;
   font-weight: 500;
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex: 1;
+  white-space: nowrap;
 }
 
 .location-tag {
@@ -264,51 +324,6 @@ button.start-btn:disabled {
   border-radius: 20px;
   font-size: 11px;
   font-weight: 600;
-  white-space: nowrap;
-}
-
-/* Animations */
-@keyframes slideIn {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.loading-text::after {
-  content: '...';
-  display: inline-block;
-  width: 20px;
-  text-align: left;
-  animation: dots 1.5s infinite;
-}
-
-@keyframes dots {
-  0% { content: ''; }
-  33% { content: '.'; }
-  66% { content: '..'; }
-  100% { content: '...'; }
-}
-
-.spinner-slow {
-  animation: spin 3s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.empty-state {
-  text-align: center;
-  padding: 60px;
-  color: #666;
-  background: #fbfbfb;
-  border-radius: 20px;
-  border: 2px dashed #eee;
-}
-
-.export-section {
-  margin-top: 30px;
-  text-align: right;
 }
 
 .export-btn {
@@ -318,4 +333,8 @@ button.start-btn:disabled {
   border: none;
   border-radius: 8px;
   cursor: pointer;
+  font-weight: bold;
 }
+
+@keyframes animate-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.animate-spin { animation: animate-spin 1s linear infinite; }

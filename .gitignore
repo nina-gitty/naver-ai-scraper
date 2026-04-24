@@ -2,3 +2,6 @@ __pycache__/
 *.csv
 .env
 .DS_Store
+backend/user_data/
+backend/static/screenshots/*.png
+backend/quota.json
