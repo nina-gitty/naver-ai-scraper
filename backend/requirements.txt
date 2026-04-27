@@ -1,4 +1,6 @@
 fastapi
 uvicorn
-requests
+playwright
+playwright-stealth
 sse-starlette
+requests
