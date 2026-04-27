@@ -74,6 +74,23 @@ The application will be available at **http://localhost:5173**.
 
 ---
 
+## 🛡️ Session Initialization (Building Trust)
+
+To effectively bypass Naver's bot detection, you must "train" your local browser session. The `user_data` folder stores your unique browser fingerprint, making you look like a real human user.
+
+### How to Generate & Initialize `user_data`
+
+1. **Enable Headed Mode**: Open `backend/main.py` and change `headless=True` to `headless=False` (around line 155).
+2. **Run a Task**: Start the backend and frontend, then run a simple search for 1-2 keywords.
+3. **Manual Interaction**: When the browser window pops up, **manually perform a search** on Naver or **log in** with a dummy account. This generates the necessary cookies and history in `backend/user_data/`.
+4. **Re-enable Stealth**: Once successful, change `headless` back to `True`.
+
+### Where is it stored?
+- **Path**: `backend/user_data/`
+- This folder is unique to your machine and is **ignored by Git** for your security.
+
+---
+
 ## 🛡️ Privacy & Security Note
 
 For your privacy, the following files are **excluded from the repository** via `.gitignore`:
